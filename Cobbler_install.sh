@@ -16,8 +16,15 @@ while true;do
 done
 
 # 关闭SElinux
+echo "关闭SElinux"
 setenforce 0
 sed -i "s/SELINUX=enforcing/SELINUX=disabled/g" /etc/selinux/config
+
+if `sestatus | head -1 | grep disabled &> /dev/null`;then
+        echo "SElinux已关闭"
+else
+        echo "以帮您关闭SElinux，可能需要重启生效，请自行检查！" && exit 1
+fi
 
 
 # 检查epel源是否安装
@@ -70,7 +77,7 @@ PASSWD=`openssl passwd -1 -salt 'salt' 'cobbler'`
 
 # 修改系统安装后的默认密码
 sed -i "s/^default_password_crypted.*/default_password_crypted: $PASSWD/g" /etc/cobbler/settings
-
+sed -i "s/disable.*= yes/disable                 = no/g" /etc/xinetd.d/tftp
 # 启动rsync
 echo "启动rsync..."
 systemctl start rsyncd && echo "rsyncd启动成功..." || echo "rsyncd启动失败！请查看日志" || exit 1
@@ -81,18 +88,17 @@ echo "安装cobbler相关包..."
 cobbler get-loaders
 
 # 重启cobbler
-echo "正在重启cobblerd..."
+echo "正在重启cobblerd xinetd..."
 systemctl restart cobblerd
+systemctl restart xinetd
 
 # 修改dhcp配置
 echo "修改dhcp配置"
-sed -i "s/subnet 192.168.1.0/subnet $LOCAL_IP/g" /etc/cobbler/dhcp.template
+DHCP_IP=`echo "$LOCAL_IP" |sed  -E "s/\.[0-9]+$//g"`
+sed -i "s/subnet 192.168.1.0/subnet $DHCP_IP.0/g" /etc/cobbler/dhcp.template
 sed -i "s/option routers             192.168.1.5;/option routers             $LOCAL_IP;/g" /etc/cobbler/dhcp.template
 sed -i "s/option domain-name-servers 192.168.1.1;/option domain-name-servers 202.103.24.68;/g" /etc/cobbler/dhcp.template
-
-DHCP_IP=`echo "$LOCAL_IP" |sed  -E "s/\.[0-9]+$//g"`
-
 sed -i "s/range dynamic-bootp        192.168.1.100 192.168.1.254/range dynamic-bootp        $DHCP_IP.100 $DHCP_IP.254/g" /etc/cobbler/dhcp.template
 
 echo "同步cobbler..."
-cobbler sync && 安装完成！
+cobbler sync && echo "安装完成!"
